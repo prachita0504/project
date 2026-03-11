@@ -10,7 +10,7 @@ export default function App() {
   // Poll /ready endpoint
   const checkMesh = async () => {
     try {
-      const res = await fetch("http://localhost:5000/ready");
+      const res = await fetch("http://192.168.31.30:5000/ready");
       const data = await res.json();
       if (data.ready) {
         setMeshReady(true);
@@ -30,7 +30,7 @@ export default function App() {
     formData.append("video", video);
 
     setProcessing(true);
-    await axios.post("http://localhost:5000/upload", formData);
+    await axios.post("http://192.168.31.30:5000/upload", formData);
 
     // Start polling after upload
     checkMesh();
