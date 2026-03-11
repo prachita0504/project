@@ -7,7 +7,7 @@ COLMAP = "colmap"
 
 frames = Path("../frames")
 workspace = Path("../workspace")
-dense = Path("../dense")
+dense = workspace / "dense"
 model = Path("../model")
 
 workspace.mkdir(exist_ok=True)
@@ -40,16 +40,15 @@ if len(maps) == 0:
     print("No reconstruction created")
     sys.exit(1)
 
-reconstruction = list(maps.values())[0]
-reconstruction.export_PLY(model / "model.ply")
+# choose largest reconstruction automatically
+largest = max(maps.values(), key=lambda r: r.num_reg_images())
+
+largest.export_PLY(model / "model.ply")
 
 print("Sparse reconstruction done")
 print("Sparse model saved at ../model/model.ply")
 
-sparse_model_path = workspace / "0"
-if not sparse_model_path.exists():
-    print("Sparse model folder not found")
-    sys.exit(1)
+sparse_model_path = workspace / str(largest.model_id)
 
 print("STEP 4: Image undistortion")
 
@@ -60,7 +59,7 @@ result = subprocess.run([
     "--input_path", str(sparse_model_path),
     "--output_path", str(dense),
     "--output_type", "COLMAP"
-], check=False)
+])
 
 if result.returncode != 0:
     print("image_undistorter failed")
@@ -72,11 +71,10 @@ result = subprocess.run([
     COLMAP,
     "patch_match_stereo",
     "--workspace_path", str(dense)
-], check=False)
+])
 
 if result.returncode != 0:
-    print("Dense stereo failed. CUDA not available.")
-    print("Continuing with sparse model only.")
+    print("Dense stereo failed (likely no CUDA). Continuing with sparse model.")
     sys.exit(0)
 
 print("STEP 6: Stereo fusion")
@@ -86,7 +84,7 @@ result = subprocess.run([
     "stereo_fusion",
     "--workspace_path", str(dense),
     "--output_path", str(model / "dense.ply")
-], check=False)
+])
 
 if result.returncode != 0:
     print("stereo_fusion failed")
@@ -99,7 +97,7 @@ result = subprocess.run([
     "poisson_mesher",
     "--input_path", str(model / "dense.ply"),
     "--output_path", str(model / "mesh.ply")
-], check=False)
+])
 
 if result.returncode != 0:
     print("poisson_mesher failed")
