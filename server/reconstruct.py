@@ -3,7 +3,7 @@ import subprocess
 from pathlib import Path
 import sys
 
-COLMAP = r"C:\Users\prach\Downloads\colmap\COLMAP.bat"
+COLMAP = "colmap"
 
 frames = Path("../frames")
 workspace = Path("../workspace")
