@@ -61,7 +61,7 @@ app.post("/upload", upload.single("video"), (req, res) => {
   ffmpeg(videoPath)
     .output(path.join(framesDir, "frame_%04d.jpg"))
     .outputOptions([
-      "-vf fps=2",
+      "-vf fps=1",
       "-qscale:v 2"
     ])
     .on("end", () => {

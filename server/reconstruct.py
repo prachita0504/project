@@ -24,14 +24,14 @@ pycolmap.extract_features(
     database_path=str(database),
     image_path=str(frames),
     camera_model="SIMPLE_RADIAL",
-    device=pycolmap.Device.cpu   # 🔴 CPU
+    device=pycolmap.Device.cpu
 )
 
 print("STEP 2: Sequential matching (CPU)")
 
 pycolmap.match_sequential(
     database_path=str(database),
-    device=pycolmap.Device.cpu   # 🔴 CPU
+    device=pycolmap.Device.cpu
 )
 
 print("STEP 3: Sparse mapping")
@@ -65,15 +65,31 @@ subprocess.run([
     "--output_type", "COLMAP"
 ], check=True)
 
-print("STEP 5: Patch match stereo (GPU)")
+print("STEP 5: Patch match stereo")
 
-subprocess.run([
-    COLMAP,
-    "patch_match_stereo",
-    "--workspace_path", str(dense),
-    "--workspace_format", "COLMAP",
-    "--PatchMatchStereo.gpu_index", "0"
-], check=True)
+try:
+
+    subprocess.run([
+        COLMAP,
+        "patch_match_stereo",
+        "--workspace_path", str(dense),
+        "--workspace_format", "COLMAP",
+        "--PatchMatchStereo.gpu_index", "0",
+        "--PatchMatchStereo.geom_consistency", "true",
+        "--PatchMatchStereo.max_image_size", "1600"
+    ], check=True)
+
+except:
+
+    print("GPU failed, switching to CPU")
+
+    subprocess.run([
+        COLMAP,
+        "patch_match_stereo",
+        "--workspace_path", str(dense),
+        "--workspace_format", "COLMAP",
+        "--PatchMatchStereo.gpu_index", "-1"
+    ], check=True)
 
 print("STEP 6: Stereo fusion")
 
