@@ -13,9 +13,8 @@ dense = workspace / "dense"
 model = Path("../model")
 database = workspace / "database.db"
 
-# clean workspace
-if workspace.exists():
-    shutil.rmtree(workspace, ignore_errors=True)
+# Clean workspace safely
+shutil.rmtree(workspace, ignore_errors=True)
 
 workspace.mkdir(exist_ok=True)
 dense.mkdir(parents=True, exist_ok=True)
@@ -44,7 +43,7 @@ if valid < 10:
     print("Not enough frames")
     sys.exit(1)
 
-print("STEP 1: Feature extraction (CPU)")
+print("STEP 1: Feature extraction")
 
 pycolmap.extract_features(
     database_path=str(database),
@@ -95,19 +94,17 @@ subprocess.run([
 print("STEP 5: Dense stereo")
 
 try:
-
     subprocess.run([
         COLMAP,
         "patch_match_stereo",
         "--workspace_path", str(dense),
         "--workspace_format", "COLMAP",
-        "--PatchMatchStereo.geom_consistency", "true",
-        "--PatchMatchStereo.max_image_size", "1000"
+        "--PatchMatchStereo.max_image_size", "1000",
+        "--PatchMatchStereo.geom_consistency", "true"
     ], check=True)
 
 except subprocess.CalledProcessError:
-
-    print("Dense stereo failed. Continuing with sparse model only.")
+    print("Dense stereo failed. Continuing with sparse model.")
     sys.exit(0)
 
 print("STEP 6: Stereo fusion")
