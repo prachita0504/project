@@ -2,23 +2,49 @@ import pycolmap
 import subprocess
 from pathlib import Path
 import sys
+from PIL import Image
+import shutil
 
 COLMAP = "colmap"
 
 frames = Path("../frames")
 workspace = Path("../workspace")
 dense = workspace / "dense"
-dense_sparse = dense / "sparse"
 model = Path("../model")
-
 database = workspace / "database.db"
+
+# Clean workspace
+if workspace.exists():
+    shutil.rmtree(workspace)
 
 workspace.mkdir(exist_ok=True)
 dense.mkdir(parents=True, exist_ok=True)
-dense_sparse.mkdir(parents=True, exist_ok=True)
 model.mkdir(exist_ok=True)
 
-print("STEP 1: Feature extraction (CPU)")
+print("STEP 0: Checking frames")
+
+valid = 0
+
+for img in frames.glob("*.jpg"):
+    try:
+        im = Image.open(img)
+        w, h = im.size
+
+        if w < 10 or h < 10:
+            img.unlink()
+        else:
+            valid += 1
+
+    except:
+        img.unlink()
+
+print("Valid frames:", valid)
+
+if valid < 10:
+    print("Not enough frames")
+    sys.exit(1)
+
+print("STEP 1: Feature extraction")
 
 pycolmap.extract_features(
     database_path=str(database),
@@ -27,7 +53,7 @@ pycolmap.extract_features(
     device=pycolmap.Device.cpu
 )
 
-print("STEP 2: Sequential matching (CPU)")
+print("STEP 2: Matching")
 
 pycolmap.match_sequential(
     database_path=str(database),
@@ -46,13 +72,13 @@ if len(maps) == 0:
     print("No reconstruction created")
     sys.exit(1)
 
-largest_id, largest = max(maps.items(), key=lambda item: item[1].num_reg_images())
+largest_id, largest = max(maps.items(), key=lambda x: x[1].num_reg_images())
 
 largest.export_PLY(str(model / "model.ply"))
 
 print("Sparse reconstruction done")
 
-sparse_model_path = workspace / str(largest_id)
+sparse_model = workspace / str(largest_id)
 
 print("STEP 4: Image undistortion")
 
@@ -60,12 +86,13 @@ subprocess.run([
     COLMAP,
     "image_undistorter",
     "--image_path", str(frames),
-    "--input_path", str(sparse_model_path),
+    "--input_path", str(sparse_model),
     "--output_path", str(dense),
-    "--output_type", "COLMAP"
+    "--output_type", "COLMAP",
+    "--max_image_size", "1600"
 ], check=True)
 
-print("STEP 5: Patch match stereo")
+print("STEP 5: Dense stereo")
 
 try:
 
@@ -74,20 +101,21 @@ try:
         "patch_match_stereo",
         "--workspace_path", str(dense),
         "--workspace_format", "COLMAP",
-        "--PatchMatchStereo.gpu_index", "0",
+        "--PatchMatchStereo.max_image_size", "1200",
         "--PatchMatchStereo.geom_consistency", "true",
-        "--PatchMatchStereo.max_image_size", "1600"
+        "--PatchMatchStereo.gpu_index", "0"
     ], check=True)
 
 except:
 
-    print("GPU failed, switching to CPU")
+    print("GPU failed → using CPU")
 
     subprocess.run([
         COLMAP,
         "patch_match_stereo",
         "--workspace_path", str(dense),
         "--workspace_format", "COLMAP",
+        "--PatchMatchStereo.max_image_size", "1200",
         "--PatchMatchStereo.gpu_index", "-1"
     ], check=True)
 
@@ -101,7 +129,7 @@ subprocess.run([
     "--output_path", str(model / "dense.ply")
 ], check=True)
 
-print("STEP 7: Mesh reconstruction")
+print("STEP 7: Mesh")
 
 subprocess.run([
     COLMAP,
@@ -110,4 +138,4 @@ subprocess.run([
     "--output_path", str(model / "mesh.ply")
 ], check=True)
 
-print("DONE - Mesh created")
+print("DONE")
