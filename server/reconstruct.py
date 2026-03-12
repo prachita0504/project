@@ -2,61 +2,28 @@ import pycolmap
 import subprocess
 from pathlib import Path
 import sys
-from PIL import Image
-import shutil
-
-COLMAP = "colmap"
 
 frames = Path("../frames")
 workspace = Path("../workspace")
-dense = workspace / "dense"
 model = Path("../model")
-database = workspace / "database.db"
-
-# Clean workspace safely
-shutil.rmtree(workspace, ignore_errors=True)
 
 workspace.mkdir(exist_ok=True)
-dense.mkdir(parents=True, exist_ok=True)
 model.mkdir(exist_ok=True)
 
-print("STEP 0: Checking frames")
-
-valid = 0
-
-for img in frames.glob("*.jpg"):
-    try:
-        im = Image.open(img)
-        w, h = im.size
-
-        if w < 20 or h < 20:
-            img.unlink()
-        else:
-            valid += 1
-
-    except:
-        img.unlink()
-
-print("Valid frames:", valid)
-
-if valid < 10:
-    print("Not enough frames")
-    sys.exit(1)
+database = workspace / "database.db"
 
 print("STEP 1: Feature extraction")
 
 pycolmap.extract_features(
     database_path=str(database),
     image_path=str(frames),
-    camera_model="SIMPLE_RADIAL",
-    device=pycolmap.Device.cpu
+    camera_model="SIMPLE_RADIAL"
 )
 
-print("STEP 2: Sequential matching")
+print("STEP 2: Matching")
 
 pycolmap.match_sequential(
-    database_path=str(database),
-    device=pycolmap.Device.cpu
+    database_path=str(database)
 )
 
 print("STEP 3: Sparse mapping")
@@ -79,52 +46,14 @@ print("Sparse reconstruction done")
 
 sparse_model = workspace / str(largest_id)
 
-print("STEP 4: Image undistortion")
+print("STEP 4: Train Gaussian Splatting")
 
 subprocess.run([
-    COLMAP,
-    "image_undistorter",
-    "--image_path", str(frames),
-    "--input_path", str(sparse_model),
-    "--output_path", str(dense),
-    "--output_type", "COLMAP",
-    "--max_image_size", "1600"
-], check=True)
+    "python",
+    "/var/project/gaussian-splatting/train.py",
+    "-s", str(frames),
+    "-m", str(model),
+    "--colmap_path", str(sparse_model)
+])
 
-print("STEP 5: Dense stereo")
-
-try:
-    subprocess.run([
-        COLMAP,
-        "patch_match_stereo",
-        "--workspace_path", str(dense),
-        "--workspace_format", "COLMAP",
-        "--PatchMatchStereo.max_image_size", "1000",
-        "--PatchMatchStereo.geom_consistency", "true"
-    ], check=True)
-
-except subprocess.CalledProcessError:
-    print("Dense stereo failed. Continuing with sparse model.")
-    sys.exit(0)
-
-print("STEP 6: Stereo fusion")
-
-subprocess.run([
-    COLMAP,
-    "stereo_fusion",
-    "--workspace_path", str(dense),
-    "--workspace_format", "COLMAP",
-    "--input_type", "geometric",
-    "--output_path", str(model / "dense.ply")
-], check=True)
-
-print("STEP 7: Mesh reconstruction")
-
-subprocess.run([
-    COLMAP,
-    "poisson_mesher",
-    "--input_path", str(model / "dense.ply"),
-    "--output_path", str(model / "mesh.ply")
-], check=True)
-
-print("DONE - Mesh created")
+print("DONE - Gaussian model created")

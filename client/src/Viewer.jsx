@@ -1,43 +1,42 @@
 import { Canvas, useLoader } from "@react-three/fiber"
 import { OrbitControls, Center } from "@react-three/drei"
 import { PLYLoader } from "three-stdlib"
-import { Suspense, useEffect } from "react"
+import { Suspense } from "react"
 
-function PointCloud({ modelUrl }) {
-  const geometry = useLoader(PLYLoader, modelUrl)
+function PointCloud({ url }) {
 
-  useEffect(() => {
-    geometry.computeVertexNormals()
-    geometry.computeBoundingSphere()
-  }, [geometry])
+  const geometry = useLoader(PLYLoader, url)
+
+  geometry.computeBoundingSphere()
 
   return (
     <Center>
       <points geometry={geometry}>
         <pointsMaterial
           size={0.02}
-          sizeAttenuation
           color="#ffffff"
+          sizeAttenuation
         />
       </points>
     </Center>
   )
 }
 
-export default function Viewer({ modelUrl }) {
+export default function Viewer() {
+
+  const modelUrl = "http://192.168.31.30:5000/model/point_cloud.ply"
+
   return (
-    <Canvas camera={{ position: [0, 0, 3], fov: 60 }}>
+    <Canvas camera={{ position: [0, 0, 4], fov: 60 }}>
+
       <ambientLight intensity={0.8} />
 
       <Suspense fallback={null}>
-        <PointCloud modelUrl={modelUrl} />
+        <PointCloud url={modelUrl} />
       </Suspense>
 
-      <OrbitControls
-        enablePan
-        enableZoom
-        enableRotate
-      />
+      <OrbitControls enableZoom enableRotate enablePan />
+
     </Canvas>
   )
 }
