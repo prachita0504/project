@@ -11,46 +11,46 @@ dense = workspace / "dense"
 dense_sparse = dense / "sparse"
 model = Path("../model")
 
+database = workspace / "database.db"
+
 # create required folders
 workspace.mkdir(exist_ok=True)
 dense.mkdir(parents=True, exist_ok=True)
 dense_sparse.mkdir(parents=True, exist_ok=True)
 model.mkdir(exist_ok=True)
 
-database = workspace / "database.db"
-
 print("STEP 1: Feature extraction")
 
 pycolmap.extract_features(
-    database_path=database,
-    image_path=frames,
+    database_path=str(database),
+    image_path=str(frames),
     camera_model="SIMPLE_RADIAL",
-    sift_options={"use_gpu": True}
+    device=pycolmap.Device.cuda
 )
 
 print("STEP 2: Sequential feature matching")
 
 pycolmap.match_sequential(
-    database_path=database,
-    matching_options={"use_gpu": True}
+    database_path=str(database),
+    device=pycolmap.Device.cuda
 )
 
 print("STEP 3: Sparse mapping")
 
 maps = pycolmap.incremental_mapping(
-    database_path=database,
-    image_path=frames,
-    output_path=workspace
+    database_path=str(database),
+    image_path=str(frames),
+    output_path=str(workspace)
 )
 
 if len(maps) == 0:
     print("No reconstruction created")
     sys.exit(1)
 
-# choose largest reconstruction
+# select largest reconstruction
 largest_id, largest = max(maps.items(), key=lambda item: item[1].num_reg_images())
 
-largest.export_PLY(model / "model.ply")
+largest.export_PLY(str(model / "model.ply"))
 
 print("Sparse reconstruction done")
 print("Sparse model saved at ../model/model.ply")
@@ -76,7 +76,7 @@ if result.returncode != 0:
     print("image_undistorter failed")
     sys.exit(1)
 
-print("STEP 5: Patch match stereo (GPU)")
+print("STEP 5: Patch match stereo")
 
 result = subprocess.run([
     COLMAP,
@@ -87,8 +87,7 @@ result = subprocess.run([
 ])
 
 if result.returncode != 0:
-    print("Dense stereo failed (CUDA may not be available).")
-    print("Continuing with sparse model only.")
+    print("Dense stereo failed")
     sys.exit(0)
 
 print("STEP 6: Stereo fusion")
