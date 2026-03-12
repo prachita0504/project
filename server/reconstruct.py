@@ -13,9 +13,9 @@ dense = workspace / "dense"
 model = Path("../model")
 database = workspace / "database.db"
 
-# Clean workspace
+# clean workspace
 if workspace.exists():
-    shutil.rmtree(workspace)
+    shutil.rmtree(workspace, ignore_errors=True)
 
 workspace.mkdir(exist_ok=True)
 dense.mkdir(parents=True, exist_ok=True)
@@ -30,7 +30,7 @@ for img in frames.glob("*.jpg"):
         im = Image.open(img)
         w, h = im.size
 
-        if w < 10 or h < 10:
+        if w < 20 or h < 20:
             img.unlink()
         else:
             valid += 1
@@ -44,7 +44,7 @@ if valid < 10:
     print("Not enough frames")
     sys.exit(1)
 
-print("STEP 1: Feature extraction")
+print("STEP 1: Feature extraction (CPU)")
 
 pycolmap.extract_features(
     database_path=str(database),
@@ -53,7 +53,7 @@ pycolmap.extract_features(
     device=pycolmap.Device.cpu
 )
 
-print("STEP 2: Matching")
+print("STEP 2: Sequential matching")
 
 pycolmap.match_sequential(
     database_path=str(database),
@@ -101,23 +101,14 @@ try:
         "patch_match_stereo",
         "--workspace_path", str(dense),
         "--workspace_format", "COLMAP",
-        "--PatchMatchStereo.max_image_size", "1200",
         "--PatchMatchStereo.geom_consistency", "true",
-        "--PatchMatchStereo.gpu_index", "0"
+        "--PatchMatchStereo.max_image_size", "1000"
     ], check=True)
 
-except:
+except subprocess.CalledProcessError:
 
-    print("GPU failed → using CPU")
-
-    subprocess.run([
-        COLMAP,
-        "patch_match_stereo",
-        "--workspace_path", str(dense),
-        "--workspace_format", "COLMAP",
-        "--PatchMatchStereo.max_image_size", "1200",
-        "--PatchMatchStereo.gpu_index", "-1"
-    ], check=True)
+    print("Dense stereo failed. Continuing with sparse model only.")
+    sys.exit(0)
 
 print("STEP 6: Stereo fusion")
 
@@ -126,10 +117,11 @@ subprocess.run([
     "stereo_fusion",
     "--workspace_path", str(dense),
     "--workspace_format", "COLMAP",
+    "--input_type", "geometric",
     "--output_path", str(model / "dense.ply")
 ], check=True)
 
-print("STEP 7: Mesh")
+print("STEP 7: Mesh reconstruction")
 
 subprocess.run([
     COLMAP,
@@ -138,4 +130,4 @@ subprocess.run([
     "--output_path", str(model / "mesh.ply")
 ], check=True)
 
-print("DONE")
+print("DONE - Mesh created")
