@@ -32,7 +32,7 @@ print("STEP 2: Sequential feature matching")
 
 pycolmap.match_sequential(
     database_path=str(database),
-    device=pycolmap.Device.cuda
+    device=pycolmap.Device.cpu
 )
 
 print("STEP 3: Sparse mapping")
