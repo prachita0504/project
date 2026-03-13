@@ -36,14 +36,11 @@ const upload = multer({
 })
 
 function clearFolder(folder) {
-
   if (!fs.existsSync(folder)) return
 
   fs.readdirSync(folder).forEach(file => {
-
     const filePath = path.join(folder, file)
     fs.rmSync(filePath, { recursive: true, force: true })
-
   })
 }
 
@@ -72,9 +69,9 @@ app.post("/upload", upload.single("video"), (req, res) => {
     .on("end", () => {
 
       console.log("Frames extracted")
-      console.log("Running full 3D pipeline...")
+      console.log("Running COLMAP reconstruction...")
 
-      const pipeline = spawn("bash", ["pipeline.sh"], {
+      const pipeline = spawn("python3", ["pipeline.py"], {
         cwd: __dirname
       })
 
@@ -88,8 +85,6 @@ app.post("/upload", upload.single("video"), (req, res) => {
 
       pipeline.on("close", code => {
 
-        console.log("Pipeline finished:", code)
-
         if (code !== 0) {
           return res.status(500).json({
             error: "3D reconstruction failed"
@@ -97,8 +92,8 @@ app.post("/upload", upload.single("video"), (req, res) => {
         }
 
         return res.json({
-          message: "Gaussian scene generated",
-          model: "/model"
+          message: "3D point cloud generated",
+          model: "/model/model.ply"
         })
 
       })

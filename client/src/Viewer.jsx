@@ -7,16 +7,12 @@ function PointCloud({ url }) {
 
   const geometry = useLoader(PLYLoader, url)
 
-  geometry.computeBoundingSphere()
+  geometry.computeVertexNormals()
 
   return (
     <Center>
       <points geometry={geometry}>
-        <pointsMaterial
-          size={0.02}
-          color="#ffffff"
-          sizeAttenuation
-        />
+        <pointsMaterial size={0.02} color="#ffffff" />
       </points>
     </Center>
   )
@@ -24,7 +20,7 @@ function PointCloud({ url }) {
 
 export default function Viewer() {
 
-  const modelUrl = "http://192.168.31.30:5000/model/point_cloud.ply"
+  const modelUrl = "http://192.168.31.30:5000/model/model.ply"
 
   return (
     <Canvas camera={{ position: [0, 0, 4], fov: 60 }}>

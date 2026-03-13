@@ -1,5 +1,4 @@
 import pycolmap
-import subprocess
 from pathlib import Path
 import sys
 
@@ -40,20 +39,8 @@ if len(maps) == 0:
 
 largest_id, largest = max(maps.items(), key=lambda x: x[1].num_reg_images())
 
+print("Exporting PLY")
+
 largest.export_PLY(str(model / "model.ply"))
 
-print("Sparse reconstruction done")
-
-sparse_model = workspace / str(largest_id)
-
-print("STEP 4: Train Gaussian Splatting")
-
-subprocess.run([
-    "python",
-    "/var/project/gaussian-splatting/train.py",
-    "-s", str(frames),
-    "-m", str(model),
-    "--colmap_path", str(sparse_model)
-])
-
-print("DONE - Gaussian model created")
+print("DONE - Point cloud created")
