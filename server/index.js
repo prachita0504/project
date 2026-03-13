@@ -19,7 +19,7 @@ const framesDir = path.join(__dirname, "../frames")
 const workspaceDir = path.join(__dirname, "../workspace")
 const modelDir = path.join(__dirname, "../model")
 
-;[uploadsDir, framesDir, workspaceDir, modelDir].forEach((dir) => {
+;[uploadsDir, framesDir, workspaceDir, modelDir].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 })
 
@@ -32,7 +32,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 500 * 1024 * 1024 } // 500MB
+  limits: { fileSize: 500 * 1024 * 1024 }
 })
 
 function clearFolder(folder) {
@@ -42,7 +42,6 @@ function clearFolder(folder) {
   fs.readdirSync(folder).forEach(file => {
 
     const filePath = path.join(folder, file)
-
     fs.rmSync(filePath, { recursive: true, force: true })
 
   })
@@ -73,39 +72,33 @@ app.post("/upload", upload.single("video"), (req, res) => {
     .on("end", () => {
 
       console.log("Frames extracted")
-      console.log("Starting reconstruction")
+      console.log("Running full 3D pipeline...")
 
-      const py = spawn("python3", ["reconstruct.py"], {
+      const pipeline = spawn("bash", ["pipeline.sh"], {
         cwd: __dirname
       })
 
-      let errorOutput = ""
-
-      py.stdout.on("data", data => {
+      pipeline.stdout.on("data", data => {
         console.log(data.toString())
       })
 
-      py.stderr.on("data", data => {
-        const msg = data.toString()
-        console.error(msg)
-        errorOutput += msg
+      pipeline.stderr.on("data", data => {
+        console.error(data.toString())
       })
 
-      py.on("close", code => {
+      pipeline.on("close", code => {
 
-        console.log("Reconstruction exited:", code)
+        console.log("Pipeline finished:", code)
 
-        if (code !== 0 || errorOutput.length > 0) {
+        if (code !== 0) {
           return res.status(500).json({
-            error: "Reconstruction failed"
+            error: "3D reconstruction failed"
           })
         }
 
         return res.json({
-          message: "3D model generated",
-          sparse: "/model/model.ply",
-          dense: "/model/dense.ply",
-          mesh: "/model/mesh.ply"
+          message: "Gaussian scene generated",
+          model: "/model"
         })
 
       })
@@ -125,7 +118,5 @@ app.post("/upload", upload.single("video"), (req, res) => {
 })
 
 app.listen(5000, "0.0.0.0", () => {
-
   console.log("Server running on port 5000")
-
 })
