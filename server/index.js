@@ -45,7 +45,7 @@ app.post("/upload", upload.single("video"), async (req, res) => {
     await new Promise((resolve, reject) => {
       ffmpeg(videoPath)
         .output(`${framesDir}/frame_%04d.jpg`)
-        .outputOptions("-vf fps=3")
+        .outputOptions("-vf fps=1")
         .on("end", resolve)
         .on("error", reject)
         .run()
