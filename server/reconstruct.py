@@ -9,7 +9,6 @@ model = "../model"
 database = f"{workspace}/database.db"
 sparse = f"{workspace}/sparse"
 
-# create folders
 os.makedirs(workspace, exist_ok=True)
 os.makedirs(model, exist_ok=True)
 os.makedirs(sparse, exist_ok=True)
@@ -42,7 +41,7 @@ subprocess.run([
 model_path = f"{sparse}/0"
 
 if not os.path.exists(model_path):
-    print("❌ Reconstruction failed — sparse/0 not created")
+    print(" Reconstruction failed: sparse/0 not created")
     sys.exit(1)
 
 print("STEP 4: Exporting PLY")
@@ -54,4 +53,4 @@ subprocess.run([
 "--output_type","PLY"
 ], check=True)
 
-print("✅ DONE: model.ply created")
+print("DONE: model.ply created")
