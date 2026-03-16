@@ -1,41 +1,82 @@
-import { useState } from "react"
-import axios from "axios"
-import Viewer from "./Viewer"
+import { useState } from "react";
+import axios from "axios";
+import Viewer from "./Viewer";
 
 export default function App() {
 
-  const [video, setVideo] = useState(null)
-  const [model, setModel] = useState(null)
+  const [video, setVideo] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [meshReady, setMeshReady] = useState(false);
+  const [modelUrl, setModelUrl] = useState(null);
 
   const upload = async () => {
 
-    const formData = new FormData()
-    formData.append("video", video)
+    if (!video) {
+      alert("Select a video first");
+      return;
+    }
 
-    const res = await axios.post(
-  "http://192.168.31.135:5000/upload",
-  formData
-)
+    const formData = new FormData();
+    formData.append("video", video);
 
-    setModel(res.data.modelUrl)
+    try {
 
-  }
+      setProcessing(true);
+
+      const res = await axios.post(
+        "http://192.168.31.30:5000/upload", // unchanged
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data"
+          }
+        }
+      );
+
+      console.log(res.data);
+
+      if (res.data.modelUrl) {
+        setModelUrl(res.data.modelUrl);
+        setMeshReady(true);
+      }
+
+    } catch (err) {
+
+      console.error(err);
+      alert("Upload or processing failed");
+
+    } finally {
+
+      setProcessing(false);
+
+    }
+
+  };
 
   return (
-    <div>
+    <div style={{ padding: 20 }}>
 
-      <h1>Upload Video for 360° 3D Reconstruction</h1>
+      <h2>Upload Video for 360° 3D Reconstruction</h2>
 
       <input
         type="file"
+        accept="video/*"
         onChange={(e) => setVideo(e.target.files[0])}
       />
 
-      <button onClick={upload}>Upload</button>
+      <button
+        onClick={upload}
+        style={{ marginLeft: 10 }}
+      >
+        Upload
+      </button>
 
-      {model && <Viewer file={model} />}
+      {processing && (
+        <p>Processing video & generating 3D model... please wait</p>
+      )}
+
+      {meshReady && <Viewer file={modelUrl} />}
 
     </div>
-  )
-
+  );
 }
