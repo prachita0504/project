@@ -13,9 +13,9 @@ export default function App() {
     formData.append("video", video)
 
     const res = await axios.post(
-      "http://localhost:5000/upload",
-      formData
-    )
+  "http://192.168.31.135:5000/upload",
+  formData
+)
 
     setModel(res.data.modelUrl)
 

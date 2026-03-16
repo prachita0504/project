@@ -94,8 +94,9 @@ app.post("/upload", upload.single("video"), async (req, res) => {
 
     console.log("DONE")
 
+    // CHANGE HERE
     res.json({
-      modelUrl: "http://localhost:5000/model/model.ply"
+      modelUrl: "http://192.168.31.135:5000/model/model.ply"
     })
 
   } catch (err) {
@@ -110,6 +111,7 @@ app.post("/upload", upload.single("video"), async (req, res) => {
 
 })
 
-app.listen(5000, () => {
+// IMPORTANT CHANGE HERE
+app.listen(5000, "0.0.0.0", () => {
   console.log("Server running on port 5000")
 })
