@@ -3,13 +3,14 @@ import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader"
 
-export default function Viewer({ file }) {
+export default function Viewer() {
 
   const mountRef = useRef()
 
   useEffect(() => {
 
     const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0x000000)
 
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -18,29 +19,34 @@ export default function Viewer({ file }) {
       1000
     )
 
-    camera.position.z = 2
+    camera.position.z = 3
 
-    const renderer = new THREE.WebGLRenderer()
+    const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
 
     mountRef.current.appendChild(renderer.domElement)
 
     const controls = new OrbitControls(camera, renderer.domElement)
+    controls.enableDamping = true
 
     const loader = new PLYLoader()
 
-    loader.load(file, (geometry) => {
+    loader.load(
+      "http://192.168.31.135:5000/model/model.ply",
+      (geometry) => {
 
-      const material = new THREE.PointsMaterial({
-        size: 0.01,
-        vertexColors: true
-      })
+        geometry.computeVertexNormals()
 
-      const mesh = new THREE.Points(geometry, material)
+        const material = new THREE.PointsMaterial({
+          size: 0.01,
+          vertexColors: true
+        })
 
-      scene.add(mesh)
+        const points = new THREE.Points(geometry, material)
 
-    })
+        scene.add(points)
+      }
+    )
 
     const animate = () => {
 
@@ -54,8 +60,7 @@ export default function Viewer({ file }) {
 
     animate()
 
-  }, [file])
+  }, [])
 
   return <div ref={mountRef}></div>
-
 }
