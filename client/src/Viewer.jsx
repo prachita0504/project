@@ -32,7 +32,7 @@ export default function Viewer() {
     const loader = new PLYLoader()
 
     loader.load(
-      "http://192.168.31.135:5000/model/model.ply",
+      "http://192.168.31.30:5000/model/model.ply",
       (geometry) => {
 
         geometry.computeVertexNormals()
