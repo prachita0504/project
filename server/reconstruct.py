@@ -1,46 +1,55 @@
-import pycolmap
-from pathlib import Path
-import sys
+import subprocess
+import os
 
-frames = Path("../frames")
-workspace = Path("../workspace")
-model = Path("../model")
+frames="../frames"
+workspace="../workspace"
+model="../model"
 
-workspace.mkdir(exist_ok=True)
-model.mkdir(exist_ok=True)
+os.makedirs(workspace,exist_ok=True)
+os.makedirs(model,exist_ok=True)
 
-database = workspace / "database.db"
+print("STEP 1: feature extraction")
 
-print("STEP 1: Feature extraction")
+subprocess.run([
+"colmap","feature_extractor",
+"--database_path",f"{workspace}/database.db",
+"--image_path",frames,
+"--ImageReader.camera_model","SIMPLE_RADIAL"
+])
 
-pycolmap.extract_features(
-    database_path=str(database),
-    image_path=str(frames),
-    camera_model="SIMPLE_RADIAL"
-)
+print("STEP 2: matching")
 
-print("STEP 2: Matching")
+subprocess.run([
+"colmap","sequential_matcher",
+"--database_path",f"{workspace}/database.db"
+])
 
-pycolmap.match_sequential(
-    database_path=str(database)
-)
+print("STEP 3: mapping")
 
-print("STEP 3: Sparse mapping")
+subprocess.run([
+"colmap","mapper",
+"--database_path",f"{workspace}/database.db",
+"--image_path",frames,
+"--output_path",f"{workspace}/sparse"
+])
 
-maps = pycolmap.incremental_mapping(
-    database_path=str(database),
-    image_path=str(frames),
-    output_path=str(workspace)
-)
+print("STEP 4: undistorting")
 
-if len(maps) == 0:
-    print("No reconstruction created")
-    sys.exit(1)
+subprocess.run([
+"colmap","image_undistorter",
+"--image_path",frames,
+"--input_path",f"{workspace}/sparse/0",
+"--output_path",f"{workspace}/dense",
+"--output_type","COLMAP"
+])
 
-largest_id, largest = max(maps.items(), key=lambda x: x[1].num_reg_images())
+print("STEP 5: exporting point cloud")
 
-print("Exporting PLY")
+subprocess.run([
+"colmap","model_converter",
+"--input_path",f"{workspace}/sparse/0",
+"--output_path",f"{model}/model.ply",
+"--output_type","PLY"
+])
 
-largest.export_PLY(str(model / "model.ply"))
-
-print("DONE - Point cloud created")
+print("DONE")

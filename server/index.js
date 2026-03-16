@@ -10,7 +10,6 @@ const fs = require("fs")
 ffmpeg.setFfmpegPath(ffmpegPath)
 
 const app = express()
-
 app.use(cors())
 app.use(express.json())
 
@@ -27,84 +26,55 @@ app.use("/model", express.static(modelDir))
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
+  filename: (req, file, cb) => cb(null, Date.now()+"-"+file.originalname)
 })
 
-const upload = multer({
-  storage,
-  limits: { fileSize: 500 * 1024 * 1024 }
-})
+const upload = multer({ storage })
 
-function clearFolder(folder) {
-  if (!fs.existsSync(folder)) return
-
-  fs.readdirSync(folder).forEach(file => {
-    const filePath = path.join(folder, file)
-    fs.rmSync(filePath, { recursive: true, force: true })
+function clearFolder(folder){
+  if(!fs.existsSync(folder)) return
+  fs.readdirSync(folder).forEach(file=>{
+    fs.rmSync(path.join(folder,file),{recursive:true,force:true})
   })
 }
 
-app.post("/upload", upload.single("video"), (req, res) => {
-
-  if (!req.file) {
-    return res.status(400).json({ error: "No video uploaded" })
-  }
+app.post("/upload", upload.single("video"), (req,res)=>{
 
   const videoPath = req.file.path
-
-  console.log("Cleaning old data...")
 
   clearFolder(framesDir)
   clearFolder(workspaceDir)
   clearFolder(modelDir)
 
-  console.log("Extracting frames...")
+  console.log("Extracting frames")
 
   ffmpeg(videoPath)
-    .output(path.join(framesDir, "frame_%04d.jpg"))
+    .output(path.join(framesDir,"frame_%04d.jpg"))
     .outputOptions([
-      "-vf fps=1,scale=1280:-1",
+      "-vf fps=3,scale=1280:-1",
       "-qscale:v 2"
     ])
-    .on("end", () => {
+    .on("end",()=>{
 
       console.log("Frames extracted")
-      console.log("Running COLMAP reconstruction...")
 
-      const pipeline = spawn("python3", ["pipeline.py"], {
-        cwd: __dirname
+      const process = spawn("python3",["reconstruction.py"],{
+        cwd:__dirname
       })
 
-      pipeline.stdout.on("data", data => {
-        console.log(data.toString())
-      })
+      process.stdout.on("data",d=>console.log(d.toString()))
+      process.stderr.on("data",d=>console.error(d.toString()))
 
-      pipeline.stderr.on("data", data => {
-        console.error(data.toString())
-      })
+      process.on("close",code=>{
 
-      pipeline.on("close", code => {
-
-        if (code !== 0) {
-          return res.status(500).json({
-            error: "3D reconstruction failed"
-          })
+        if(code!==0){
+          return res.status(500).json({error:"Reconstruction failed"})
         }
 
-        return res.json({
-          message: "3D point cloud generated",
-          model: "/model/model.ply"
+        res.json({
+          model:"/model/model.ply"
         })
 
-      })
-
-    })
-    .on("error", err => {
-
-      console.error("FFmpeg error:", err)
-
-      return res.status(500).json({
-        error: "Frame extraction failed"
       })
 
     })
@@ -112,6 +82,6 @@ app.post("/upload", upload.single("video"), (req, res) => {
 
 })
 
-app.listen(5000, "0.0.0.0", () => {
-  console.log("Server running on port 5000")
+app.listen(5000,"0.0.0.0",()=>{
+  console.log("Server running on 5000")
 })
