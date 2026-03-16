@@ -13,105 +13,111 @@ app.use(cors())
 const uploadsDir = path.join(__dirname, "../uploads")
 const framesDir = path.join(__dirname, "../frames")
 const workspaceDir = path.join(__dirname, "../workspace")
-const sparseDir = path.join(__dirname, "../workspace/sparse")
 const modelDir = path.join(__dirname, "../model")
 
-// create folders if missing
-;[uploadsDir, framesDir, workspaceDir, sparseDir, modelDir].forEach((dir) => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+;[uploadsDir, framesDir, workspaceDir, modelDir].forEach((dir)=>{
+  if(!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true})
 })
 
-// multer
-const upload = multer({ dest: uploadsDir })
+const upload = multer({dest:uploadsDir})
 
-// serve model
 app.use("/model", express.static(modelDir))
 
-function execPromise(cmd) {
-  return new Promise((resolve, reject) => {
-    exec(cmd, (err, stdout, stderr) => {
+function run(cmd){
+  return new Promise((resolve,reject)=>{
+    exec(cmd,(err,stdout,stderr)=>{
       console.log(stdout)
       console.log(stderr)
-      if (err) reject(err)
+      if(err) reject(err)
       else resolve()
     })
   })
 }
 
-app.post("/upload", upload.single("video"), async (req, res) => {
+app.post("/upload", upload.single("video"), async (req,res)=>{
 
-  try {
+  try{
 
     const videoPath = req.file.path
 
     console.log("STEP 1: extracting frames")
 
-    await new Promise((resolve, reject) => {
-
+    await new Promise((resolve,reject)=>{
       ffmpeg(videoPath)
-        .output(`${framesDir}/frame_%04d.jpg`)
-        .outputOptions("-vf fps=0.3")
-        .on("end", resolve)
-        .on("error", reject)
-        .run()
-
+      .output(`${framesDir}/frame_%04d.jpg`)
+      .outputOptions("-vf fps=1")
+      .on("end",resolve)
+      .on("error",reject)
+      .run()
     })
 
     console.log("STEP 2: feature extraction")
 
-    await execPromise(`
+    await run(`
     colmap feature_extractor \
     --database_path ${workspaceDir}/database.db \
-    --image_path ${framesDir} \
-    --ImageReader.camera_model SIMPLE_RADIAL
+    --image_path ${framesDir}
     `)
 
     console.log("STEP 3: matching")
 
-    await execPromise(`
+    await run(`
     colmap exhaustive_matcher \
     --database_path ${workspaceDir}/database.db
     `)
 
-    console.log("STEP 4: mapping")
+    console.log("STEP 4: sparse reconstruction")
 
-    await execPromise(`
+    await run(`
     colmap mapper \
     --database_path ${workspaceDir}/database.db \
     --image_path ${framesDir} \
-    --output_path ${sparseDir} \
-    --Mapper.min_num_matches 15
+    --output_path ${workspaceDir}/sparse
     `)
 
-    console.log("STEP 5: export PLY")
+    console.log("STEP 5: undistort")
 
-    await execPromise(`
-    colmap model_converter \
-    --input_path ${sparseDir}/0 \
-    --output_path ${modelDir}/model.ply \
-    --output_type PLY
+    await run(`
+    colmap image_undistorter \
+    --image_path ${framesDir} \
+    --input_path ${workspaceDir}/sparse/0 \
+    --output_path ${workspaceDir}/dense \
+    --output_type COLMAP
+    `)
+
+    console.log("STEP 6: dense stereo")
+
+    await run(`
+    colmap patch_match_stereo \
+    --workspace_path ${workspaceDir}/dense
+    `)
+
+    console.log("STEP 7: fusion")
+
+    await run(`
+    colmap stereo_fusion \
+    --workspace_path ${workspaceDir}/dense \
+    --output_path ${modelDir}/model.ply
     `)
 
     console.log("DONE")
 
-    // CHANGE HERE
     res.json({
-      modelUrl: "http://192.168.31:5000/model/model.ply"
+      modelUrl:"http://192.168.31.30:5000/model/model.ply"
     })
 
-  } catch (err) {
+  }catch(err){
 
     console.log(err)
 
     res.status(500).json({
-      error: "Reconstruction failed"
+      error:"Reconstruction failed"
     })
 
   }
 
 })
 
-// IMPORTANT CHANGE HERE
-app.listen(5000, "0.0.0.0", () => {
+app.listen(5000,"0.0.0.0",()=>{
   console.log("Server running on port 5000")
 })
