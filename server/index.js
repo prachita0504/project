@@ -62,7 +62,7 @@ app.post("/upload", upload.single("video"), async (req,res)=>{
 
       ffmpeg(videoPath)
         .output(`${framesDir}/frame_%04d.jpg`)
-        .outputOptions("-vf fps=2")
+        .outputOptions("-vf fps=3")
         .on("end",resolve)
         .on("error",reject)
         .run()
@@ -81,10 +81,10 @@ app.post("/upload", upload.single("video"), async (req,res)=>{
     console.log("STEP 3 sequential matching")
 
     await run("colmap",[
-      "sequential_matcher",
-      "--database_path",`${workspaceDir}/database.db`,
-      "--SequentialMatching.overlap","20"
-    ])
+"sequential_matcher",
+"--database_path",`${workspaceDir}/database.db`,
+"--SequentialMatching.overlap","50"
+])
 
     console.log("STEP 4 mapping")
 
