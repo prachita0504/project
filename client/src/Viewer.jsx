@@ -1,29 +1,63 @@
-import { Canvas, useLoader } from "@react-three/fiber"
-import { OrbitControls } from "@react-three/drei"
-import { PLYLoader } from "three-stdlib"
+import { useEffect, useRef } from "react"
+import * as THREE from "three"
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
+import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader"
 
-function PointCloud({url}){
+export default function Viewer() {
 
- const geometry = useLoader(PLYLoader,url)
+  const mountRef = useRef()
 
- return (
-   <points geometry={geometry}>
-     <pointsMaterial size={0.01} color="white"/>
-   </points>
- )
+  useEffect(() => {
 
-}
+    const scene = new THREE.Scene()
 
-export default function Viewer(){
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    )
 
- const model="http://192.168.31.30:5000/model/model.ply"
+    camera.position.z = 2
 
- return(
-   <Canvas camera={{position:[0,0,4]}}>
-     <ambientLight/>
-     <PointCloud url={model}/>
-     <OrbitControls/>
-   </Canvas>
- )
+    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.setSize(window.innerWidth, window.innerHeight)
+
+    mountRef.current.appendChild(renderer.domElement)
+
+    const controls = new OrbitControls(camera, renderer.domElement)
+
+    const loader = new PLYLoader()
+
+    loader.load("/model/model.ply", (geometry) => {
+
+      geometry.computeVertexNormals()
+
+      const material = new THREE.PointsMaterial({
+        size: 0.01,
+        vertexColors: true
+      })
+
+      const mesh = new THREE.Points(geometry, material)
+
+      scene.add(mesh)
+
+    })
+
+    const animate = () => {
+
+      requestAnimationFrame(animate)
+
+      controls.update()
+
+      renderer.render(scene, camera)
+
+    }
+
+    animate()
+
+  }, [])
+
+  return <div ref={mountRef}></div>
 
 }
