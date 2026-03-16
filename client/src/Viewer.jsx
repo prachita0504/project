@@ -3,7 +3,7 @@ import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader"
 
-export default function Viewer() {
+export default function Viewer({ file }) {
 
   const mountRef = useRef()
 
@@ -19,7 +19,7 @@ export default function Viewer() {
       1000
     )
 
-    camera.position.z = 3
+    camera.position.set(0,0,5)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setSize(window.innerWidth, window.innerHeight)
@@ -31,22 +31,29 @@ export default function Viewer() {
 
     const loader = new PLYLoader()
 
-    loader.load(
-      "http://192.168.31.30:5000/model/model.ply",
-      (geometry) => {
+    loader.load(file, (geometry) => {
 
-        geometry.computeVertexNormals()
+      geometry.computeVertexNormals()
 
-        const material = new THREE.PointsMaterial({
-          size: 0.01,
-          vertexColors: true
-        })
+      const material = new THREE.PointsMaterial({
+        size: 0.03,
+        vertexColors: true
+      })
 
-        const points = new THREE.Points(geometry, material)
+      const points = new THREE.Points(geometry, material)
 
-        scene.add(points)
-      }
-    )
+      // center model
+      geometry.computeBoundingBox()
+      const center = new THREE.Vector3()
+      geometry.boundingBox.getCenter(center)
+      points.position.sub(center)
+
+      // scale model
+      points.scale.set(5,5,5)
+
+      scene.add(points)
+
+    })
 
     const animate = () => {
 
@@ -60,7 +67,12 @@ export default function Viewer() {
 
     animate()
 
-  }, [])
+    return () => {
+      mountRef.current.removeChild(renderer.domElement)
+    }
+
+  }, [file])
 
   return <div ref={mountRef}></div>
+
 }
