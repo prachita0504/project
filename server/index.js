@@ -2,7 +2,7 @@ const express = require("express")
 const multer = require("multer")
 const cors = require("cors")
 const ffmpeg = require("fluent-ffmpeg")
-const { exec } = require("child_process")
+const { spawn } = require("child_process")
 const fs = require("fs")
 const path = require("path")
 
@@ -23,15 +23,29 @@ const upload = multer({ dest: uploadsDir })
 
 app.use("/model", express.static(modelDir))
 
-function run(cmd) {
+function run(command, args) {
+
   return new Promise((resolve, reject) => {
-    exec(cmd, (err, stdout, stderr) => {
-      console.log(stdout)
-      console.log(stderr)
-      if (err) reject(err)
-      else resolve()
+
+    const process = spawn(command, args)
+
+    process.stdout.on("data", data => {
+      console.log(data.toString())
     })
+
+    process.stderr.on("data", data => {
+      console.log(data.toString())
+    })
+
+    process.on("close", code => {
+
+      if (code === 0) resolve()
+      else reject(`Process exited with code ${code}`)
+
+    })
+
   })
+
 }
 
 app.post("/upload", upload.single("video"), async (req, res) => {
@@ -43,68 +57,71 @@ app.post("/upload", upload.single("video"), async (req, res) => {
     console.log("STEP 1 extracting frames")
 
     await new Promise((resolve, reject) => {
+
       ffmpeg(videoPath)
         .output(`${framesDir}/frame_%04d.jpg`)
-        .outputOptions("-vf fps=1")
+        .outputOptions("-vf fps=2")
         .on("end", resolve)
         .on("error", reject)
         .run()
+
     })
 
     console.log("STEP 2 feature extraction")
 
-    await run(`
-colmap feature_extractor \
---database_path ${workspaceDir}/database.db \
---image_path ${framesDir} \
---ImageReader.camera_model SIMPLE_RADIAL
-`)
+    await run("colmap", [
+      "feature_extractor",
+      "--database_path", `${workspaceDir}/database.db`,
+      "--image_path", framesDir,
+      "--ImageReader.camera_model", "SIMPLE_RADIAL"
+    ])
 
-    console.log("STEP 3 matching")
+    console.log("STEP 3 sequential matching")
 
-    await run(`
-colmap exhaustive_matcher \
---database_path ${workspaceDir}/database.db
-`)
+    await run("colmap", [
+      "sequential_matcher",
+      "--database_path", `${workspaceDir}/database.db`,
+      "--SequentialMatching.overlap", "20"
+    ])
 
     console.log("STEP 4 mapping")
 
-    await run(`
-mkdir -p ${workspaceDir}/sparse
-colmap mapper \
---database_path ${workspaceDir}/database.db \
---image_path ${framesDir} \
---output_path ${workspaceDir}/sparse
-`)
+    await run("colmap", [
+      "mapper",
+      "--database_path", `${workspaceDir}/database.db`,
+      "--image_path", framesDir,
+      "--output_path", `${workspaceDir}/sparse`,
+      "--Mapper.min_num_matches", "5"
+    ])
 
-    console.log("STEP 5 undistort")
+    console.log("STEP 5 undistorting")
 
-    await run(`
-colmap image_undistorter \
---image_path ${framesDir} \
---input_path ${workspaceDir}/sparse/0 \
---output_path ${denseDir} \
---output_type COLMAP
-`)
+    await run("colmap", [
+      "image_undistorter",
+      "--image_path", framesDir,
+      "--input_path", `${workspaceDir}/sparse/0`,
+      "--output_path", denseDir,
+      "--output_type", "COLMAP"
+    ])
 
     console.log("STEP 6 patch match")
 
-    await run(`
-colmap patch_match_stereo \
---workspace_path ${denseDir} \
---workspace_format COLMAP \
---PatchMatchStereo.geom_consistency true
-`)
+    await run("colmap", [
+      "patch_match_stereo",
+      "--workspace_path", denseDir,
+      "--workspace_format", "COLMAP",
+      "--PatchMatchStereo.geom_consistency", "true"
+    ])
 
     console.log("STEP 7 fusion")
 
-    await run(`
-colmap stereo_fusion \
---workspace_path ${denseDir} \
---workspace_format COLMAP \
---input_type geometric \
---output_path ${modelDir}/model.ply
-`)
+    await run("colmap", [
+      "stereo_fusion",
+      "--workspace_path", denseDir,
+      "--workspace_format", "COLMAP",
+      "--input_type", "geometric",
+      "--output_path", `${modelDir}/model.ply`
+    ])
 
     console.log("DONE")
 
