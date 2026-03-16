@@ -6,7 +6,6 @@ export default function App() {
 
   const [video, setVideo] = useState(null);
   const [processing, setProcessing] = useState(false);
-  const [meshReady, setMeshReady] = useState(false);
   const [modelUrl, setModelUrl] = useState(null);
 
   const upload = async () => {
@@ -24,7 +23,7 @@ export default function App() {
       setProcessing(true);
 
       const res = await axios.post(
-        "http://192.168.31.30:5000/upload", // unchanged
+        "http://192.168.31.30:5000/upload",
         formData,
         {
           headers: {
@@ -33,11 +32,12 @@ export default function App() {
         }
       );
 
-      console.log(res.data);
+      console.log("Server response:", res.data);
 
       if (res.data.modelUrl) {
         setModelUrl(res.data.modelUrl);
-        setMeshReady(true);
+      } else {
+        alert("Model generation failed");
       }
 
     } catch (err) {
@@ -75,7 +75,7 @@ export default function App() {
         <p>Processing video & generating 3D model... please wait</p>
       )}
 
-      {meshReady && <Viewer file={modelUrl} />}
+      {modelUrl && <Viewer file={modelUrl} />}
 
     </div>
   );
