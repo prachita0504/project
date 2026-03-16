@@ -96,7 +96,7 @@ app.post("/upload", upload.single("video"), async (req, res) => {
 
     // CHANGE HERE
     res.json({
-      modelUrl: "http://192.168.31.135:5000/model/model.ply"
+      modelUrl: "http://192.168.31:5000/model/model.ply"
     })
 
   } catch (err) {
