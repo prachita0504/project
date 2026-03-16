@@ -14,7 +14,7 @@ os.makedirs(workspace, exist_ok=True)
 os.makedirs(model, exist_ok=True)
 os.makedirs(sparse, exist_ok=True)
 
-print("STEP 1: feature extraction")
+print("STEP 1: Feature extraction")
 
 subprocess.run([
 "colmap","feature_extractor",
@@ -23,14 +23,14 @@ subprocess.run([
 "--ImageReader.camera_model","SIMPLE_RADIAL"
 ], check=True)
 
-print("STEP 2: sequential matching")
+print("STEP 2: Sequential matching")
 
 subprocess.run([
 "colmap","sequential_matcher",
 "--database_path",database
 ], check=True)
 
-print("STEP 3: mapping")
+print("STEP 3: Mapping")
 
 subprocess.run([
 "colmap","mapper",
@@ -41,12 +41,11 @@ subprocess.run([
 
 model_path = f"{sparse}/0"
 
-# check reconstruction exists
 if not os.path.exists(model_path):
-    print("❌ Reconstruction failed")
+    print("❌ Reconstruction failed — sparse/0 not created")
     sys.exit(1)
 
-print("STEP 4: exporting point cloud")
+print("STEP 4: Exporting PLY")
 
 subprocess.run([
 "colmap","model_converter",
@@ -55,4 +54,4 @@ subprocess.run([
 "--output_type","PLY"
 ], check=True)
 
-print("✅ DONE - model.ply created")
+print("✅ DONE: model.ply created")
