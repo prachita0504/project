@@ -2,86 +2,114 @@ const express = require("express")
 const multer = require("multer")
 const cors = require("cors")
 const ffmpeg = require("fluent-ffmpeg")
-const ffmpegPath = require("@ffmpeg-installer/ffmpeg").path
-const { spawn } = require("child_process")
-const path = require("path")
+const { exec } = require("child_process")
 const fs = require("fs")
-
-ffmpeg.setFfmpegPath(ffmpegPath)
+const path = require("path")
 
 const app = express()
 app.use(cors())
-app.use(express.json())
 
+// folders
 const uploadsDir = path.join(__dirname, "../uploads")
 const framesDir = path.join(__dirname, "../frames")
 const workspaceDir = path.join(__dirname, "../workspace")
+const sparseDir = path.join(__dirname, "../workspace/sparse")
 const modelDir = path.join(__dirname, "../model")
 
-;[uploadsDir, framesDir, workspaceDir, modelDir].forEach(dir => {
+// create folders if missing
+;[uploadsDir, framesDir, workspaceDir, sparseDir, modelDir].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 })
 
+// multer
+const upload = multer({ dest: uploadsDir })
+
+// serve model
 app.use("/model", express.static(modelDir))
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadsDir),
-  filename: (req, file, cb) => cb(null, Date.now()+"-"+file.originalname)
-})
-
-const upload = multer({ storage })
-
-function clearFolder(folder){
-  if(!fs.existsSync(folder)) return
-  fs.readdirSync(folder).forEach(file=>{
-    fs.rmSync(path.join(folder,file),{recursive:true,force:true})
+function execPromise(cmd) {
+  return new Promise((resolve, reject) => {
+    exec(cmd, (err, stdout, stderr) => {
+      console.log(stdout)
+      console.log(stderr)
+      if (err) reject(err)
+      else resolve()
+    })
   })
 }
 
-app.post("/upload", upload.single("video"), (req,res)=>{
+app.post("/upload", upload.single("video"), async (req, res) => {
 
-  const videoPath = req.file.path
+  try {
 
-  clearFolder(framesDir)
-  clearFolder(workspaceDir)
-  clearFolder(modelDir)
+    const videoPath = req.file.path
 
-  console.log("Extracting frames")
+    console.log("STEP 1: extracting frames")
 
-  ffmpeg(videoPath)
-    .output(path.join(framesDir,"frame_%04d.jpg"))
-    .outputOptions([
-      "-vf fps=1,scale=1280:-1",
-      "-qscale:v 2"
-    ])
-    .on("end",()=>{
+    await new Promise((resolve, reject) => {
 
-      console.log("Frames extracted")
-
-      const process = spawn("python3",["reconstruction.py"],{
-        cwd:__dirname
-      })
-
-      process.stdout.on("data",d=>console.log(d.toString()))
-      process.stderr.on("data",d=>console.error(d.toString()))
-
-      process.on("close",code=>{
-
-        if(code!==0){
-          return res.status(500).json({error:"Reconstruction failed"})
-        }
-
-        res.json({
-          model:"/model/model.ply"
-        })
-
-      })
+      ffmpeg(videoPath)
+        .output(`${framesDir}/frame_%04d.jpg`)
+        .outputOptions("-vf fps=0.3")
+        .on("end", resolve)
+        .on("error", reject)
+        .run()
 
     })
-    .run()
+
+    console.log("STEP 2: feature extraction")
+
+    await execPromise(`
+    colmap feature_extractor \
+    --database_path ${workspaceDir}/database.db \
+    --image_path ${framesDir} \
+    --ImageReader.camera_model SIMPLE_RADIAL
+    `)
+
+    console.log("STEP 3: matching")
+
+    await execPromise(`
+    colmap exhaustive_matcher \
+    --database_path ${workspaceDir}/database.db
+    `)
+
+    console.log("STEP 4: mapping")
+
+    await execPromise(`
+    colmap mapper \
+    --database_path ${workspaceDir}/database.db \
+    --image_path ${framesDir} \
+    --output_path ${sparseDir} \
+    --Mapper.min_num_matches 15
+    `)
+
+    console.log("STEP 5: export PLY")
+
+    await execPromise(`
+    colmap model_converter \
+    --input_path ${sparseDir}/0 \
+    --output_path ${modelDir}/model.ply \
+    --output_type PLY
+    `)
+
+    console.log("DONE")
+
+    res.json({
+      modelUrl: "http://localhost:5000/model/model.ply"
+    })
+
+  } catch (err) {
+
+    console.log(err)
+
+    res.status(500).json({
+      error: "Reconstruction failed"
+    })
+
+  }
 
 })
 
-app.listen(5000,"0.0.0.0",()=>{
-  console.log("Server running on 5000")
+app.listen(5000, () => {
+  console.log("Server running on port 5000")
 })

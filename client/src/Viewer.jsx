@@ -3,7 +3,7 @@ import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader"
 
-export default function Viewer() {
+export default function Viewer({ file }) {
 
   const mountRef = useRef()
 
@@ -20,7 +20,7 @@ export default function Viewer() {
 
     camera.position.z = 2
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    const renderer = new THREE.WebGLRenderer()
     renderer.setSize(window.innerWidth, window.innerHeight)
 
     mountRef.current.appendChild(renderer.domElement)
@@ -29,9 +29,7 @@ export default function Viewer() {
 
     const loader = new PLYLoader()
 
-    loader.load("/model/model.ply", (geometry) => {
-
-      geometry.computeVertexNormals()
+    loader.load(file, (geometry) => {
 
       const material = new THREE.PointsMaterial({
         size: 0.01,
@@ -56,7 +54,7 @@ export default function Viewer() {
 
     animate()
 
-  }, [])
+  }, [file])
 
   return <div ref={mountRef}></div>
 
