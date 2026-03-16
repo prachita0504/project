@@ -1,55 +1,58 @@
 import subprocess
 import os
+import sys
 
-frames="../frames"
-workspace="../workspace"
-model="../model"
+frames = "../frames"
+workspace = "../workspace"
+model = "../model"
 
-os.makedirs(workspace,exist_ok=True)
-os.makedirs(model,exist_ok=True)
+database = f"{workspace}/database.db"
+sparse = f"{workspace}/sparse"
+
+# create folders
+os.makedirs(workspace, exist_ok=True)
+os.makedirs(model, exist_ok=True)
+os.makedirs(sparse, exist_ok=True)
 
 print("STEP 1: feature extraction")
 
 subprocess.run([
 "colmap","feature_extractor",
-"--database_path",f"{workspace}/database.db",
+"--database_path",database,
 "--image_path",frames,
 "--ImageReader.camera_model","SIMPLE_RADIAL"
-])
+], check=True)
 
-print("STEP 2: matching")
+print("STEP 2: sequential matching")
 
 subprocess.run([
 "colmap","sequential_matcher",
-"--database_path",f"{workspace}/database.db"
-])
+"--database_path",database
+], check=True)
 
 print("STEP 3: mapping")
 
 subprocess.run([
 "colmap","mapper",
-"--database_path",f"{workspace}/database.db",
+"--database_path",database,
 "--image_path",frames,
-"--output_path",f"{workspace}/sparse"
-])
+"--output_path",sparse
+], check=True)
 
-print("STEP 4: undistorting")
+model_path = f"{sparse}/0"
 
-subprocess.run([
-"colmap","image_undistorter",
-"--image_path",frames,
-"--input_path",f"{workspace}/sparse/0",
-"--output_path",f"{workspace}/dense",
-"--output_type","COLMAP"
-])
+# check reconstruction exists
+if not os.path.exists(model_path):
+    print("❌ Reconstruction failed")
+    sys.exit(1)
 
-print("STEP 5: exporting point cloud")
+print("STEP 4: exporting point cloud")
 
 subprocess.run([
 "colmap","model_converter",
-"--input_path",f"{workspace}/sparse/0",
+"--input_path",model_path,
 "--output_path",f"{model}/model.ply",
 "--output_type","PLY"
-])
+], check=True)
 
-print("DONE")
+print("✅ DONE - model.ply created")
