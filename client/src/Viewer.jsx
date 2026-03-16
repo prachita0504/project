@@ -3,31 +3,33 @@ import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls"
 import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader"
 
-export default function Viewer({file}){
+export default function Viewer({ file }) {
 
   const mountRef = useRef()
 
-  useEffect(()=>{
+  useEffect(() => {
 
     const scene = new THREE.Scene()
 
     const camera = new THREE.PerspectiveCamera(
       75,
-      window.innerWidth/window.innerHeight,
+      window.innerWidth / window.innerHeight,
       0.1,
       1000
     )
 
-    const renderer = new THREE.WebGLRenderer({antialias:true})
-    renderer.setSize(window.innerWidth,window.innerHeight)
+    camera.position.set(0,0,5)
+
+    const renderer = new THREE.WebGLRenderer({ antialias:true })
+    renderer.setSize(window.innerWidth, window.innerHeight)
 
     mountRef.current.appendChild(renderer.domElement)
 
-    const controls = new OrbitControls(camera,renderer.domElement)
+    const controls = new OrbitControls(camera, renderer.domElement)
 
     const loader = new PLYLoader()
 
-    loader.load(file,(geometry)=>{
+    loader.load(file, (geometry)=>{
 
       geometry.computeVertexNormals()
 
@@ -36,38 +38,28 @@ export default function Viewer({file}){
         vertexColors:true
       })
 
-      const mesh = new THREE.Points(geometry,material)
+      const points = new THREE.Points(geometry, material)
 
       geometry.computeBoundingBox()
 
       const center = new THREE.Vector3()
       geometry.boundingBox.getCenter(center)
 
-      mesh.position.sub(center)
+      points.position.sub(center)
 
-      scene.add(mesh)
-
-      camera.position.z = 3
+      scene.add(points)
 
     })
 
-    const animate=()=>{
+    const animate = ()=>{
 
       requestAnimationFrame(animate)
-
       controls.update()
-
       renderer.render(scene,camera)
 
     }
 
     animate()
-
-    return ()=>{
-      if(mountRef.current){
-        mountRef.current.removeChild(renderer.domElement)
-      }
-    }
 
   },[file])
 
