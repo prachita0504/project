@@ -13,40 +13,27 @@ app.use(cors())
 const uploadsDir = path.join(__dirname, "../uploads")
 const framesDir = path.join(__dirname, "../frames")
 const workspaceDir = path.join(__dirname, "../workspace")
-const sparseDir = path.join(__dirname, "../workspace/sparse")
-const denseDir = path.join(__dirname, "../dense")
 const modelDir = path.join(__dirname, "../model")
 
-// create folders
-;[uploadsDir, framesDir, workspaceDir, sparseDir, denseDir, modelDir].forEach((dir)=>{
+;[uploadsDir, framesDir, workspaceDir, modelDir].forEach(dir=>{
   if(!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true})
 })
 
-// multer
 const upload = multer({ dest: uploadsDir })
 
-// serve model
 app.use("/model", express.static(modelDir))
 
-// command runner
 function run(command,args){
   return new Promise((resolve,reject)=>{
+    const proc = spawn(command,args,{shell:true})
 
-    const proc = spawn(command,args)
+    proc.stdout.on("data",d=>console.log(d.toString()))
+    proc.stderr.on("data",d=>console.log(d.toString()))
 
-    proc.stdout.on("data",(data)=>{
-      console.log(data.toString())
-    })
-
-    proc.stderr.on("data",(data)=>{
-      console.log(data.toString())
-    })
-
-    proc.on("close",(code)=>{
+    proc.on("close",code=>{
       if(code===0) resolve()
-      else reject(`Process exited with code ${code}`)
+      else reject(`Process failed: ${code}`)
     })
-
   })
 }
 
@@ -56,74 +43,59 @@ app.post("/upload", upload.single("video"), async (req,res)=>{
 
     const videoPath = req.file.path
 
-    console.log("STEP 1 extracting frames")
+    console.log("STEP 1: Extract frames")
+
+    // clear old frames
+    fs.readdirSync(framesDir).forEach(f=>{
+      fs.unlinkSync(path.join(framesDir,f))
+    })
 
     await new Promise((resolve,reject)=>{
-
       ffmpeg(videoPath)
         .output(`${framesDir}/frame_%04d.jpg`)
-        .outputOptions("-vf fps=3")
+        .outputOptions("-vf fps=2")
         .on("end",resolve)
         .on("error",reject)
         .run()
-
     })
 
-    console.log("STEP 2 feature extraction")
+    console.log("STEP 2: COLMAP poses")
 
     await run("colmap",[
-      "feature_extractor",
-      "--database_path",`${workspaceDir}/database.db`,
+      "automatic_reconstructor",
+      "--workspace_path",workspaceDir,
       "--image_path",framesDir,
-      "--ImageReader.camera_model","SIMPLE_RADIAL"
+      "--data_type","video",
+      "--quality","low"
     ])
 
-    console.log("STEP 3 sequential matching")
+    if(!fs.existsSync(`${workspaceDir}/sparse/0`)){
+      throw new Error("COLMAP failed")
+    }
 
-    await run("colmap",[
-"sequential_matcher",
-"--database_path",`${workspaceDir}/database.db`,
-"--SequentialMatching.overlap","50"
-])
+    console.log("STEP 3: Convert to NeRF format")
 
-    console.log("STEP 4 mapping")
-
-    await run("colmap",[
-      "mapper",
-      "--database_path",`${workspaceDir}/database.db`,
-      "--image_path",framesDir,
-      "--output_path",`${workspaceDir}/sparse`,
-      "--Mapper.min_num_matches","5"
+    await run("python3",[
+      "instant-ngp/scripts/colmap2nerf.py",
+      "--images",framesDir,
+      "--text",`${workspaceDir}/sparse/0`,
+      "--out",`${workspaceDir}/transforms.json`
     ])
 
-    console.log("STEP 5 undistort")
+    console.log("STEP 4: Train NeRF")
 
-    await run("colmap",[
-      "image_undistorter",
-      "--image_path",framesDir,
-      "--input_path",`${workspaceDir}/sparse/0`,
-      "--output_path",denseDir,
-      "--output_type","COLMAP"
+    await run("./instant-ngp/build/testbed",[
+      "--scene",workspaceDir,
+      "--mode","nerf",
+      "--n_steps","5000"
     ])
 
-    console.log("STEP 6 patch match")
+    console.log("STEP 5: Export mesh")
 
-    await run("colmap",[
-      "patch_match_stereo",
-      "--workspace_path",denseDir,
-      "--workspace_format","COLMAP",
-      "--PatchMatchStereo.geom_consistency","true",
-      "--PatchMatchStereo.gpu_index","-1"
-    ])
-
-    console.log("STEP 7 fusion")
-
-    await run("colmap",[
-      "stereo_fusion",
-      "--workspace_path",denseDir,
-      "--workspace_format","COLMAP",
-      "--input_type","geometric",
-      "--output_path",`${modelDir}/model.ply`
+    await run("./instant-ngp/build/testbed",[
+      "--scene",workspaceDir,
+      "--mode","nerf",
+      "--save_mesh",`${modelDir}/model.ply`
     ])
 
     console.log("DONE")
@@ -134,13 +106,8 @@ app.post("/upload", upload.single("video"), async (req,res)=>{
 
   }
   catch(err){
-
     console.log(err)
-
-    res.status(500).json({
-      error:"Reconstruction failed"
-    })
-
+    res.status(500).json({error:"NeRF failed"})
   }
 
 })

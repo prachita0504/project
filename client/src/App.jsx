@@ -32,31 +32,21 @@ export default function App() {
         }
       );
 
-      console.log("Server response:", res.data);
-
       if (res.data.modelUrl) {
         setModelUrl(res.data.modelUrl);
-      } else {
-        alert("Model generation failed");
       }
 
     } catch (err) {
-
-      console.error(err);
-      alert("Upload or processing failed");
-
+      alert("Processing failed");
     } finally {
-
       setProcessing(false);
-
     }
 
   };
 
   return (
     <div style={{ padding: 20 }}>
-
-      <h2>Upload Video for 360° 3D Reconstruction</h2>
+      <h2>Upload Video for NeRF 360</h2>
 
       <input
         type="file"
@@ -64,19 +54,11 @@ export default function App() {
         onChange={(e) => setVideo(e.target.files[0])}
       />
 
-      <button
-        onClick={upload}
-        style={{ marginLeft: 10 }}
-      >
-        Upload
-      </button>
+      <button onClick={upload}>Upload</button>
 
-      {processing && (
-        <p>Processing video & generating 3D model... please wait</p>
-      )}
+      {processing && <p>Processing... please wait</p>}
 
       {modelUrl && <Viewer file={modelUrl} />}
-
     </div>
   );
 }
