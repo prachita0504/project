@@ -3,13 +3,11 @@ import axios from "axios";
 import Viewer from "./Viewer";
 
 export default function App() {
-
   const [video, setVideo] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [modelUrl, setModelUrl] = useState(null);
 
   const upload = async () => {
-
     if (!video) {
       alert("Select a video first");
       return;
@@ -19,34 +17,33 @@ export default function App() {
     formData.append("video", video);
 
     try {
-
       setProcessing(true);
 
       const res = await axios.post(
         "http://192.168.31.30:5000/upload",
         formData,
         {
-          headers: {
-            "Content-Type": "multipart/form-data"
-          }
+          headers: { "Content-Type": "multipart/form-data" }
         }
       );
 
       if (res.data.modelUrl) {
         setModelUrl(res.data.modelUrl);
+      } else {
+        alert("Model generation failed");
       }
 
     } catch (err) {
-      alert("Processing failed");
+      console.error(err);
+      alert("Upload or processing failed");
     } finally {
       setProcessing(false);
     }
-
   };
 
   return (
     <div style={{ padding: 20 }}>
-      <h2>Upload Video for NeRF 360</h2>
+      <h2>Upload Video for 360° NeRF</h2>
 
       <input
         type="file"
@@ -54,9 +51,13 @@ export default function App() {
         onChange={(e) => setVideo(e.target.files[0])}
       />
 
-      <button onClick={upload}>Upload</button>
+      <button onClick={upload} style={{ marginLeft: 10 }}>
+        Upload
+      </button>
 
-      {processing && <p>Processing... please wait</p>}
+      {processing && (
+        <p>Processing video... (NeRF training may take time)</p>
+      )}
 
       {modelUrl && <Viewer file={modelUrl} />}
     </div>

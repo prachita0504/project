@@ -101,7 +101,7 @@ app.post("/upload", upload.single("video"), async (req,res)=>{
     console.log("DONE")
 
     res.json({
-      modelUrl:"http://192.168.31.30:5000/model/model.ply"
+      modelUrl:"http://192.168.31.30:5000/model/model.obj"
     })
 
   }
