@@ -43,6 +43,12 @@ app.post("/upload", upload.single("video"), async (req,res)=>{
 
     const videoPath = req.file.path
 
+    console.log("STEP 0: Clean workspace")
+
+    // clean workspace completely
+    fs.rmSync(workspaceDir, { recursive: true, force: true })
+    fs.mkdirSync(workspaceDir, { recursive: true })
+
     console.log("STEP 1: Extract frames")
 
     // clear old frames
@@ -59,21 +65,39 @@ app.post("/upload", upload.single("video"), async (req,res)=>{
         .run()
     })
 
-    console.log("STEP 2: COLMAP poses")
+    console.log("STEP 2: Feature extraction")
 
     await run("colmap",[
-      "automatic_reconstructor",
-      "--workspace_path",workspaceDir,
+      "feature_extractor",
+      "--database_path",`${workspaceDir}/database.db`,
       "--image_path",framesDir,
-      "--data_type","video",
-      "--quality","low"
+      "--ImageReader.camera_model","SIMPLE_RADIAL",
+      "--SiftExtraction.max_num_features","8000"
     ])
 
+    console.log("STEP 3: Matching")
+
+    await run("colmap",[
+      "exhaustive_matcher",
+      "--database_path",`${workspaceDir}/database.db`
+    ])
+
+    console.log("STEP 4: Mapping")
+
+    await run("colmap",[
+      "mapper",
+      "--database_path",`${workspaceDir}/database.db`,
+      "--image_path",framesDir,
+      "--output_path",`${workspaceDir}/sparse`,
+      "--Mapper.min_num_matches","15"
+    ])
+
+    // 🔥 IMPORTANT CHECK
     if(!fs.existsSync(`${workspaceDir}/sparse/0`)){
-      throw new Error("COLMAP failed")
+      throw new Error("COLMAP sparse reconstruction failed")
     }
 
-    console.log("STEP 3: Convert to NeRF format")
+    console.log("STEP 5: Convert to NeRF format")
 
     await run("python3",[
       "instant-ngp/scripts/colmap2nerf.py",
@@ -82,20 +106,20 @@ app.post("/upload", upload.single("video"), async (req,res)=>{
       "--out",`${workspaceDir}/transforms.json`
     ])
 
-    console.log("STEP 4: Train NeRF")
+    console.log("STEP 6: Train NeRF")
 
-    await run("./instant-ngp/build/testbed",[
+    await run("./instant-ngp/build/instant-ngp",[
       "--scene",workspaceDir,
       "--mode","nerf",
       "--n_steps","5000"
     ])
 
-    console.log("STEP 5: Export mesh")
+    console.log("STEP 7: Export mesh")
 
-    await run("./instant-ngp/build/testbed",[
+    await run("./instant-ngp/build/instant-ngp",[
       "--scene",workspaceDir,
       "--mode","nerf",
-      "--save_mesh",`${modelDir}/model.ply`
+      "--save_mesh",`${modelDir}/model.obj`
     ])
 
     console.log("DONE")
