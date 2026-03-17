@@ -10,7 +10,8 @@ echo "STEP 1: Feature Extraction"
 colmap feature_extractor \
 --database_path workspace/database.db \
 --image_path frames \
---ImageReader.camera_model SIMPLE_RADIAL
+--ImageReader.camera_model SIMPLE_PINHOLE \
+--ImageReader.single_camera 1
 
 echo "STEP 2: Sequential Matching"
 
@@ -32,4 +33,4 @@ echo "CHECKING OUTPUT..."
 
 ls workspace/sparse/0
 
-echo "DONE: Use this for Gaussian training"
+echo "DONE: Ready for Gaussian training"
