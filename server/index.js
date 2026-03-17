@@ -9,26 +9,25 @@ const path = require("path")
 const app = express()
 app.use(cors())
 
-// 📁 Paths
-const ROOT = path.join(__dirname, "..")
-const uploadsDir = path.join(ROOT, "uploads")
-const framesDir = path.join(ROOT, "frames")
-const workspaceDir = path.join(ROOT, "workspace")
+// folders
+const uploadsDir = path.join(__dirname, "../uploads")
+const framesDir = path.join(__dirname, "../frames")
+const workspaceDir = path.join(__dirname, "../workspace")
 const sparseDir = path.join(workspaceDir, "sparse")
-const modelDir = path.join(ROOT, "model")
+const modelDir = path.join(__dirname, "../model")
 
-// 📦 Ensure base folders exist
-;[uploadsDir, framesDir, workspaceDir, modelDir].forEach(dir=>{
-  if(!fs.existsSync(dir)) fs.mkdirSync(dir,{recursive:true})
+// ensure folders
+;[uploadsDir, framesDir, workspaceDir, sparseDir, modelDir].forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
 })
 
-// 📤 Upload setup
+// multer
 const upload = multer({ dest: uploadsDir })
 
-// 🌐 Serve model
+// serve model (KEEP SAME URL)
 app.use("/model", express.static(modelDir))
 
-// ⚙️ Run shell command
+// run command
 function run(command, args) {
   return new Promise((resolve, reject) => {
     const proc = spawn(command, args, { shell: true })
@@ -38,76 +37,86 @@ function run(command, args) {
 
     proc.on("close", code => {
       if (code === 0) resolve()
-      else reject(`❌ ${command} failed with code ${code}`)
+      else reject(`❌ Process failed: ${code}`)
     })
   })
 }
 
-// 🧹 Clean folder safely
-function resetDir(dir) {
+// CLEAN folder helper
+function cleanDir(dir) {
   if (fs.existsSync(dir)) {
-    fs.rmSync(dir, { recursive: true, force: true })
+    fs.readdirSync(dir).forEach(file => {
+      const filePath = path.join(dir, file)
+      if (fs.lstatSync(filePath).isDirectory()) {
+        fs.rmSync(filePath, { recursive: true, force: true })
+      } else {
+        fs.unlinkSync(filePath)
+      }
+    })
   }
-  fs.mkdirSync(dir, { recursive: true })
 }
 
-// 🎬 Extract frames
-function extractFrames(videoPath) {
-  return new Promise((resolve, reject) => {
-    ffmpeg(videoPath)
-      .output(`${framesDir}/frame_%04d.jpg`)
-      .outputOptions("-vf fps=2")
-      .on("end", resolve)
-      .on("error", reject)
-      .run()
-  })
-}
-
-// 🚀 MAIN API
 app.post("/upload", upload.single("video"), async (req, res) => {
 
   try {
 
     const videoPath = req.file.path
 
-    console.log("STEP 0: Clean folders")
-    resetDir(framesDir)
-    resetDir(workspaceDir)
+    console.log("🧹 Cleaning old data...")
+    cleanDir(framesDir)
+    cleanDir(workspaceDir)
+    cleanDir(modelDir)
+
     fs.mkdirSync(sparseDir, { recursive: true })
 
     console.log("STEP 1: Extract frames")
-    await extractFrames(videoPath)
+
+    await new Promise((resolve, reject) => {
+      ffmpeg(videoPath)
+        .output(`${framesDir}/frame_%04d.jpg`)
+        .outputOptions("-vf fps=4") // 🔥 increased overlap
+        .on("end", resolve)
+        .on("error", reject)
+        .run()
+    })
 
     console.log("STEP 2: Feature extraction")
+
     await run("colmap", [
       "feature_extractor",
       "--database_path", `${workspaceDir}/database.db`,
       "--image_path", framesDir,
       "--ImageReader.camera_model", "SIMPLE_RADIAL",
-      "--SiftExtraction.max_num_features", "8000"
+      "--SiftExtraction.max_num_features", "8000",
+      "--SiftExtraction.estimate_affine_shape", "1",
+      "--SiftExtraction.domain_size_pooling", "1"
     ])
 
-    console.log("STEP 3: Matching")
+    console.log("STEP 3: Sequential matching")
+
     await run("colmap", [
-      "exhaustive_matcher",
-      "--database_path", `${workspaceDir}/database.db`
+      "sequential_matcher",
+      "--database_path", `${workspaceDir}/database.db`,
+      "--SequentialMatching.overlap", "20"
     ])
 
     console.log("STEP 4: Mapping")
+
     await run("colmap", [
       "mapper",
       "--database_path", `${workspaceDir}/database.db`,
       "--image_path", framesDir,
       "--output_path", sparseDir,
-      "--Mapper.min_num_matches", "15"
+      "--Mapper.min_num_matches", "8"
     ])
 
-    // ✅ Check sparse result
+    // check reconstruction
     if (!fs.existsSync(`${sparseDir}/0`)) {
-      throw new Error("COLMAP sparse reconstruction failed")
+      throw new Error("❌ COLMAP failed: no reconstruction")
     }
 
-    console.log("STEP 5: Convert to NeRF")
+    console.log("STEP 5: Convert to NeRF format")
+
     await run("python3", [
       "instant-ngp/scripts/colmap2nerf.py",
       "--images", framesDir,
@@ -116,32 +125,39 @@ app.post("/upload", upload.single("video"), async (req, res) => {
     ])
 
     console.log("STEP 6: Train NeRF")
-    await run("./instant-ngp/build/instant-ngp", [
+
+    await run("./instant-ngp/build/testbed", [
       "--scene", workspaceDir,
       "--mode", "nerf",
       "--n_steps", "5000"
     ])
 
     console.log("STEP 7: Export mesh")
-    await run("./instant-ngp/build/instant-ngp", [
+
+    await run("./instant-ngp/build/testbed", [
       "--scene", workspaceDir,
       "--mode", "nerf",
-      "--save_mesh", `${modelDir}/model.obj`
+      "--save_mesh", `${modelDir}/model.ply`
     ])
 
     console.log("✅ DONE")
 
     res.json({
-      modelUrl: "http://192.168.31.30:5000/model/model.obj"
+      modelUrl: "http://192.168.31.30:5000/model/model.ply" // SAME URL
     })
 
   } catch (err) {
-    console.error(err)
-    res.status(500).json({ error: "NeRF pipeline failed" })
+
+    console.log(err)
+
+    res.status(500).json({
+      error: "❌ NeRF reconstruction failed"
+    })
+
   }
+
 })
 
-// 🚀 Start server
 app.listen(5000, "0.0.0.0", () => {
-  console.log("Server running on port 5000")
+  console.log("🚀 Server running on port 5000")
 })
