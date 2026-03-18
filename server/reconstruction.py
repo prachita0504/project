@@ -2,14 +2,12 @@ import subprocess
 import os
 import shutil
 
-# ===== PATHS =====
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 frames = os.path.join(BASE_DIR, "../frames")
 workspace = os.path.join(BASE_DIR, "../workspace")
 model = os.path.join(BASE_DIR, "../model")
 
-# ===== CLEAN OLD DATA (IMPORTANT) =====
 print("Cleaning old data...")
 
 if os.path.exists(workspace):
@@ -20,7 +18,7 @@ if os.path.exists(model):
 os.makedirs(workspace, exist_ok=True)
 os.makedirs(model, exist_ok=True)
 
-# ===== STEP 0: Copy images (REQUIRED for Gaussian) =====
+# STEP 0: Copy images
 print("STEP 0: Copying images...")
 
 images_dest = os.path.join(workspace, "images")
@@ -32,7 +30,7 @@ for file in os.listdir(frames):
     if os.path.isfile(src):
         shutil.copy(src, dst)
 
-# ===== STEP 1: Feature Extraction =====
+# STEP 1: Feature Extraction
 print("STEP 1: Feature extraction...")
 
 subprocess.run([
@@ -40,22 +38,20 @@ subprocess.run([
     "--database_path", os.path.join(workspace, "database.db"),
     "--image_path", frames,
     "--ImageReader.single_camera", "1",
-    "--ImageReader.camera_model", "SIMPLE_PINHOLE",  # ✅ FIXED
-    "--SiftExtraction.use_gpu", "1",
+    "--ImageReader.camera_model", "SIMPLE_PINHOLE",
     "--SiftExtraction.max_num_features", "8000"
 ], check=True)
 
-# ===== STEP 2: Matching (BEST for video) =====
+# STEP 2: Matching
 print("STEP 2: Sequential matching...")
 
 subprocess.run([
     "colmap", "sequential_matcher",
     "--database_path", os.path.join(workspace, "database.db"),
-    "--SiftMatching.use_gpu", "1",
     "--SequentialMatching.overlap", "10"
 ], check=True)
 
-# ===== STEP 3: Mapping =====
+# STEP 3: Mapping
 print("STEP 3: Mapping...")
 
 sparse_path = os.path.join(workspace, "sparse")
@@ -67,11 +63,10 @@ subprocess.run([
     "--image_path", frames,
     "--output_path", sparse_path,
     "--Mapper.init_min_tri_angle", "1",
-    "--Mapper.min_num_matches", "5",
-    "--Mapper.abs_pose_min_num_inliers", "6"
+    "--Mapper.min_num_matches", "5"
 ], check=True)
 
-# ===== STEP 4: Undistortion (REQUIRED) =====
+# STEP 4: Undistortion
 print("STEP 4: Undistorting images...")
 
 dense_path = os.path.join(workspace, "dense")
@@ -85,4 +80,4 @@ subprocess.run([
     "--output_type", "COLMAP"
 ], check=True)
 
-print("\n✅ RECONSTRUCTION COMPLETE — Ready for Gaussian Splatting 🚀")
+print("\n✅ RECONSTRUCTION COMPLETE — Ready for Gaussian 🚀")
