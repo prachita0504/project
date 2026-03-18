@@ -9,6 +9,14 @@ frames = os.path.join(BASE_DIR, "../frames")
 workspace = os.path.join(BASE_DIR, "../workspace")
 model = os.path.join(BASE_DIR, "../model")
 
+# ===== CLEAN OLD DATA (IMPORTANT) =====
+print("Cleaning old data...")
+
+if os.path.exists(workspace):
+    shutil.rmtree(workspace)
+if os.path.exists(model):
+    shutil.rmtree(model)
+
 os.makedirs(workspace, exist_ok=True)
 os.makedirs(model, exist_ok=True)
 
@@ -21,7 +29,7 @@ os.makedirs(images_dest, exist_ok=True)
 for file in os.listdir(frames):
     src = os.path.join(frames, file)
     dst = os.path.join(images_dest, file)
-    if os.path.isfile(src) and not os.path.exists(dst):
+    if os.path.isfile(src):
         shutil.copy(src, dst)
 
 # ===== STEP 1: Feature Extraction =====
@@ -32,7 +40,7 @@ subprocess.run([
     "--database_path", os.path.join(workspace, "database.db"),
     "--image_path", frames,
     "--ImageReader.single_camera", "1",
-    "--ImageReader.camera_model", "SIMPLE_RADIAL",
+    "--ImageReader.camera_model", "SIMPLE_PINHOLE",  # ✅ FIXED
     "--SiftExtraction.use_gpu", "1",
     "--SiftExtraction.max_num_features", "8000"
 ], check=True)
@@ -43,7 +51,8 @@ print("STEP 2: Sequential matching...")
 subprocess.run([
     "colmap", "sequential_matcher",
     "--database_path", os.path.join(workspace, "database.db"),
-    "--SiftMatching.use_gpu", "1"
+    "--SiftMatching.use_gpu", "1",
+    "--SequentialMatching.overlap", "10"
 ], check=True)
 
 # ===== STEP 3: Mapping =====
@@ -57,11 +66,12 @@ subprocess.run([
     "--database_path", os.path.join(workspace, "database.db"),
     "--image_path", frames,
     "--output_path", sparse_path,
-    "--Mapper.init_min_tri_angle", "2",
-    "--Mapper.min_num_matches", "8"
+    "--Mapper.init_min_tri_angle", "1",
+    "--Mapper.min_num_matches", "5",
+    "--Mapper.abs_pose_min_num_inliers", "6"
 ], check=True)
 
-# ===== STEP 4: Undistortion =====
+# ===== STEP 4: Undistortion (REQUIRED) =====
 print("STEP 4: Undistorting images...")
 
 dense_path = os.path.join(workspace, "dense")
@@ -75,4 +85,4 @@ subprocess.run([
     "--output_type", "COLMAP"
 ], check=True)
 
-print("\n✅ RECONSTRUCTION COMPLETE — Ready for Gaussian Splatting")
+print("\n✅ RECONSTRUCTION COMPLETE — Ready for Gaussian Splatting 🚀")
